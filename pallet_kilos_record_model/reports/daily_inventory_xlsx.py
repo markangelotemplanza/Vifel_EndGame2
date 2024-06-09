@@ -83,14 +83,11 @@ class DailyInventoryXlsx(models.AbstractModel):
         # Create an empty list to store the complete data
         complete_data = []
         
-        # Initialize previous balances
         previous_balance_pallet = None
         previous_balance_kilos = None
         
-        # Loop through each day from start_date to end_date (inclusive)
         current_date = start_date
         while current_date <= end_date:
-            # Check if a record exists for the current date
             found_record = False
             
             for item in sorted_lines:
@@ -99,7 +96,6 @@ class DailyInventoryXlsx(models.AbstractModel):
                     item_date = item_date.date()
                 
                 if item_date == current_date:
-                    # Record found, update complete_data and previous_balance
                     complete_data.append({
                         'create_date': item['create_date'],
                         'overall_pallets': item['overall_pallets'],
@@ -115,8 +111,9 @@ class DailyInventoryXlsx(models.AbstractModel):
                     previous_balance_kilos = item['overall_kilos']
                     
                     found_record = True
-                    break
             
+
+        
             # If no record found for the current date, use previous_balance
             if not found_record:
                 _logger.info(current_date)
