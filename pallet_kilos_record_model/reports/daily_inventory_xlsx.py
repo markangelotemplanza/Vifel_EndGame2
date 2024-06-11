@@ -15,7 +15,7 @@ class DailyInventoryXlsx(models.AbstractModel):
         # Add table header
     @staticmethod
     def generateTableHeader(sheet, row_index, format):         
-        tableHeaders = ['Date', 'Owner', 'Receiving Report No.', 'Withdrawal Report No.', 'Pallets Received', 'Pallets Withdrawn', 'Balance in Pallets', 'Kilos Received', 'Kilos Withdrawn', 'Balance in Kilos',]
+        tableHeaders = ['Date', 'Pallets Received', 'Pallets Withdrawn', 'Balance in Pallets', 'Kilos Received', 'Kilos Withdrawn', 'Balance in Kilos',]
         
         col_index = 0
         for headerText in tableHeaders:
@@ -81,10 +81,9 @@ class DailyInventoryXlsx(models.AbstractModel):
             end_date = end_date_str.date()
         
         # Create an empty list to store the complete data
-        complete_data = []
-        
         previous_balance_pallet = None
         previous_balance_kilos = None
+        complete_data = []
         
         current_date = start_date
         while current_date <= end_date:
@@ -96,27 +95,38 @@ class DailyInventoryXlsx(models.AbstractModel):
                     item_date = item_date.date()
                 
                 if item_date == current_date:
-                    complete_data.append({
-                        'create_date': item['create_date'],
-                        'overall_pallets': item['overall_pallets'],
-                        'overall_kilos': item['overall_kilos'],
-                        'pallets_received': item['pallets_received'],
-                        'pallets_withdrawn': item['pallets_withdrawn'],
-                        'kilos_received': item['kilos_received'],
-                        'kilos_withdrawn': item['kilos_withdrawn'],
-                        'report_no': item['report_no'],
-                        'owner_id': item['owner_id']
-                    })
+                    # Check if the last entry in complete_data has the same date
+                    if complete_data and complete_data[-1]['create_date'].date() == current_date:
+                        last_entry = complete_data[-1]
+                        last_entry['pallets_received'] += item['pallets_received']
+                        last_entry['pallets_withdrawn'] += item['pallets_withdrawn']
+                        last_entry['kilos_received'] += item['kilos_received']
+                        last_entry['kilos_withdrawn'] += item['kilos_withdrawn']
+                        last_entry['overall_pallets'] = item['overall_pallets']
+                        last_entry['overall_kilos'] = item['overall_kilos']
+                        # You can add more fields to sum if necessary
+                    else:
+                        complete_data.append({
+                            'create_date': item['create_date'],
+                            'overall_pallets': item['overall_pallets'],
+                            'overall_kilos': item['overall_kilos'],
+                            'pallets_received': item['pallets_received'],
+                            'pallets_withdrawn': item['pallets_withdrawn'],
+                            'kilos_received': item['kilos_received'],
+                            'kilos_withdrawn': item['kilos_withdrawn'],
+                            'report_no': item['report_no'],
+                            'owner_id': item['owner_id']
+                        })
+
                     previous_balance_pallet = item['overall_pallets']
                     previous_balance_kilos = item['overall_kilos']
-                    
                     found_record = True
             
 
         
             # If no record found for the current date, use previous_balance
             if not found_record:
-                _logger.info(current_date)
+               
                 if previous_balance_pallet is not None and previous_balance_kilos is not None  :
                     # Create a datetime object with the current date and time from the previous date
                     previous_date_with_time = datetime.datetime.strptime(current_date.strftime('%Y-%m-%d') + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
@@ -173,21 +183,19 @@ class DailyInventoryXlsx(models.AbstractModel):
         _logger.info(lines)
         self.generate_header(sheet, lines, [header_format, normal_format])
         self.generateTableHeader(sheet, row_index-2, table_header_format)
-        sheet.write(row_index-1, 5, lines[0].total_balance_in_pallets + lines[0].pallets_withdrawn if 'WR' in lines[0].report_no else lines[0].total_balance_in_pallets - lines[0].pallets_received, float_format_bold)
-        sheet.write(row_index-1, 8, lines[0].total_balance_in_kilos + lines[0].kilos_withdrawn if 'WR' in lines[0].report_no else lines[0].total_balance_in_kilos - lines[0].kilos_received, float_format_bold)
+        # sheet.write(row_index-1, 5, lines[0].total_balance_in_pallets + lines[0].pallets_withdrawn if 'WR' in lines[0].report_no else lines[0].total_balance_in_pallets - lines[0].pallets_received, float_format_bold)
+        # sheet.write(row_index-1, 8, lines[0].total_balance_in_kilos + lines[0].kilos_withdrawn if 'WR' in lines[0].report_no else lines[0].total_balance_in_kilos - lines[0].kilos_received, float_format_bold)
         summation = {'total_pallets_received': 0, 'total_pallets_withdrawn': 0, 'total_kilos_received': 0, 'total_kilos_withdrawn': 0}
         for line in sorted_lines:
             _logger.info(line)
 
             sheet.write(row_index, 0, line['create_date'], date_format)
-            sheet.write(row_index, 1, line['owner_id'], normal_format)
-            sheet.write(row_index, 2 if 'RR' in line['report_no'] else 3, line['report_no'], normal_format)
-            sheet.write(row_index, 4, line['pallets_received'], float_format)
-            sheet.write(row_index, 5, line['pallets_withdrawn'], float_format)
-            sheet.write(row_index, 6, line['overall_pallets'], float_format)
-            sheet.write(row_index, 7, line['kilos_received'], float_format)
-            sheet.write(row_index, 8, line['kilos_withdrawn'], float_format)
-            sheet.write(row_index, 9, line['overall_kilos'], float_format)
+            sheet.write(row_index, 1, line['pallets_received'], float_format)
+            sheet.write(row_index, 2, line['pallets_withdrawn'], float_format)
+            sheet.write(row_index, 3, line['overall_pallets'], float_format)
+            sheet.write(row_index, 4, line['kilos_received'], float_format)
+            sheet.write(row_index, 5, line['kilos_withdrawn'], float_format)
+            sheet.write(row_index, 6, line['overall_kilos'], float_format)
             
             
             # Summing up various properties
@@ -199,10 +207,10 @@ class DailyInventoryXlsx(models.AbstractModel):
             # Incrementing row index for the next line
             row_index += 1  
         # write summation total
-        sheet.write(row_index, 4, summation['total_pallets_received'], float_format_bold)
-        sheet.write(row_index, 5, summation['total_pallets_withdrawn'], float_format_bold)
-        sheet.write(row_index, 7, summation['total_kilos_received'], float_format_bold)
-        sheet.write(row_index, 8, summation['total_kilos_withdrawn'], float_format_bold)
+        sheet.write(row_index, 1, summation['total_pallets_received'], float_format_bold)
+        sheet.write(row_index, 2, summation['total_pallets_withdrawn'], float_format_bold)
+        sheet.write(row_index, 4, summation['total_kilos_received'], float_format_bold)
+        sheet.write(row_index, 5, summation['total_kilos_withdrawn'], float_format_bold)
 
         # sheet.write(row_index+3, 0, "GUARANTEED", header_format)
 
@@ -269,5 +277,3 @@ class DailyInventoryXlsx(models.AbstractModel):
 
 # for x in complete_data:
 #     print(x)
-
-
