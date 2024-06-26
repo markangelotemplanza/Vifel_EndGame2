@@ -2,11 +2,13 @@
 
 from odoo import models, fields, api
 # from odoo.exceptions import ValidationError
+import logging
+
+_logger = logging.getLogger(__name__)
 
 class multiple_relocation(models.TransientModel):
     _inherit = 'stock.quant.relocate'
     
-
     def action_relocate_quants(self):
         # raise ValidationError(_("Another user is already created using this email"))
         self.ensure_one()
@@ -39,9 +41,7 @@ class multiple_relocation(models.TransientModel):
                     product_ids.action_update_quantity_on_hand()
 
 
-import logging
 
-_logger = logging.getLogger(__name__)
 class ensure_ownership(models.Model):
     _inherit = 'stock.move'
     
@@ -66,14 +66,18 @@ class ensure_ownership(models.Model):
 
 
         
-        # _logger.info(self.partner_id.name)
+        
         quants = quant_ids._get_reserve_quantity(
             self.product_id, location_id, need, product_packaging_id=self.product_packaging_id,
             uom_id=self.product_uom, lot_id=lot_id, package_id=package_id, owner_id=self.partner_id, strict=strict)
-
+        
+        # _logger.info(self)
         taken_quantity = 0
         rounding = self.env['decimal.precision'].precision_get('Product Unit of Measure')
         # Find a candidate move line to update or create a new one.
+
+        # for x in quant_ids:
+        #     _logger.info(x)
         
         for reserved_quant, quantity, in quants:
             
@@ -92,13 +96,39 @@ class ensure_ownership(models.Model):
                         self.env['stock.move.line'].with_context(reserved_quant=reserved_quant).create(vals_list)
                 else:
                     self.env['stock.move.line'].with_context(reserved_quant=reserved_quant).create(self._prepare_move_line_vals(quantity=quantity, reserved_quant=reserved_quant))
-        _logger.info('haha')
-        _logger.info(str(taken_quantity))
+
         return taken_quantity
+
+
+class special_holding(models.Model):
+    _inherit = 'stock.quant'
+    x_studio_special_holding = fields.Boolean()
+
+    def _gather(self, product_id, location_id, lot_id=None, package_id=None, owner_id=None, strict=False, qty=0):
+        """ if records in self, the records are filtered based on the wanted characteristics passed to this function
+            if not, a search is done with all the characteristics passed.
+        """
+        removal_strategy = self._get_removal_strategy(product_id, location_id)
+        domain = self._get_gather_domain(product_id, location_id, lot_id, package_id, owner_id, strict)
+        domain, order = self._get_removal_strategy_domain_order(domain, removal_strategy, qty)
         
+        if self.ids:
+            sort_key = self._get_removal_strategy_sort_key(removal_strategy)
+            res = self.filtered_domain(domain).sorted(key=sort_key[0], reverse=sort_key[1])
+        else:
+            res = self.search(domain, order=order)
+        # List to store all matching stock.quant records
+        # if removal_strategy == "closest":
+        #     res = res.sorted(lambda q: (q.location_id.complete_name, -q.id))
+            
+        temp_var = self.env['stock.quant'].browse()
+        
+        for x in res:
+            # Search for stock.quant records matching x.id
+            quants = self.env['stock.quant'].search([('id', '=', x.id)])
+            if not quants.x_studio_special_holding and quants.x_studio_container_number:
+                _logger.info(quants.x_studio_container_number)
+                temp_var += quants
 
-    # @api.depends('value')
-    # def _value_pc(self):
-    #     for record in self:
-    #         record.value2 = float(record.value) / 100
-
+        return temp_var
+        
